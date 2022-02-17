@@ -51,6 +51,7 @@ from homeassistant.core import (
 from homeassistant.data_entry_flow import BaseServiceInfo
 from homeassistant.exceptions import HomeAssistantError, TemplateError, Unauthorized
 from homeassistant.helpers import config_validation as cv, event, template
+from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, dispatcher_send
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.frame import report
@@ -1209,7 +1210,10 @@ async def websocket_remove_device(hass, connection, msg):
         config_entry = hass.config_entries.async_get_entry(config_entry)
         # Only delete the device if it belongs to an MQTT device entry
         if config_entry.domain == DOMAIN:
-            dev_registry.async_remove_device(device_id)
+            await async_remove_config_entry_device(hass, config_entry, device)
+            dev_registry.async_update_device(
+                device_id, remove_config_entry_id=config_entry.entry_id
+            )
             connection.send_message(websocket_api.result_message(msg["id"]))
             return
 
@@ -1287,3 +1291,14 @@ def async_subscribe_connection_status(
 def is_connected(hass: HomeAssistant) -> bool:
     """Return if MQTT client is connected."""
     return hass.data[DATA_MQTT].connected
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, config_entry: ConfigEntry, device_entry: DeviceEntry
+) -> bool:
+    """Remove MQTT config entry from a device."""
+    # pylint: disable-next=import-outside-toplevel
+    from . import device_automation
+
+    await device_automation.async_removed_from_device(hass, device_entry.id)
+    return True
